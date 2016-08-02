@@ -1,15 +1,15 @@
-package = "luajwt"
-version = "1.3-4"
+package = "luajwtjitsi"
+version = "1.3-5"
 
 source = {
-	url = "git://github.com/x25/luajwt",
-	tag = "v1.4"
+	url = "git://github.com/paweldomas/luajwt/tree/luajwtjitsi",
+	tag = "v1.5"
 }
 
 description = {
 	summary = "JSON Web Tokens for Lua",
 	detailed = "Very fast and compatible with pyjwt, php-jwt, ruby-jwt, node-jwt-simple and others",
-	homepage = "https://github.com/x25/luajwt",
+	homepage = "https://github.com/paweldomas/luajwt/tree/luajwtjitsi",
 	license = "MIT <http://opensource.org/licenses/MIT>"
 }
 
@@ -23,6 +23,6 @@ dependencies = {
 build = {
 	type = "builtin",
 	modules = {
-		luajwt = "luajwt.lua"
+		luajwtjitsi = "luajwtjitsi.lua"
 	}
 }
