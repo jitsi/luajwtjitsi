@@ -2,37 +2,44 @@ local cjson  = require 'cjson'
 local base64 = require 'base64'
 local crypto = require 'crypto'
 
+local sign = function(data, key, algo) {
+	local privkey = crypto.pkey.from_pem(key, true)
+	if privkey == nil then
+		return nil, 'Not a private PEM key'
+	else
+		return crypto.sign(algo, data, privkey)
+	end
+}
+
+local verify = function(data, signature, key, algo) {
+	local pubkey = crypto.pkey.from_pem(key)
+	if pubkey == nil then
+		return nil, 'Not a public PEM key'
+	else
+		return crypto.verify(algo, data, signature, pubkey)
+}
+
 local alg_sign = {
 	['HS256'] = function(data, key) return crypto.hmac.digest('sha256', data, key, true) end,
 	['HS384'] = function(data, key) return crypto.hmac.digest('sha384', data, key, true) end,
 	['HS512'] = function(data, key) return crypto.hmac.digest('sha512', data, key, true) end,
-	['RS256'] = function(data, key)
-		local privkey = crypto.pkey.from_pem(key, true)
-		if privkey == nil then
-			return nil, "Not a private PEM key"
-		else
-			return crypto.sign("sha256", data, privkey)
-		end
-	end
+	['RS256'] = function(data, key) return sign(data, key, 'sha256') end,
+	['RS384'] = function(data, key) return sign(data, key, 'sha384') end,
+	['RS512'] = function(data, key) return sign(data, key, 'sha512') end
 }
 
 local alg_verify = {
 	['HS256'] = function(data, signature, key) return signature == alg_sign['HS256'](data, key) end,
 	['HS384'] = function(data, signature, key) return signature == alg_sign['HS384'](data, key) end,
 	['HS512'] = function(data, signature, key) return signature == alg_sign['HS512'](data, key) end,
-	['RS256'] = function(data, signature, key)
-		local pubkey = crypto.pkey.from_pem(key)
-		if pubkey == nil then
-			return nil, "Not a public PEM key"
-		else
-			return crypto.verify("sha256", data, signature, pubkey)
-		end
-	end
+	['RS256'] = function(data, signature, key) return verify(data, signature, key, 'sha256') end,
+	['RS384'] = function(data, signature, key) return verify(data, signature, key, 'sha384') end,
+	['RS512'] = function(data, signature, key) return verify(data, signature, key, 'sha512') end
 }
 
-local function b64_encode(input)	
+local function b64_encode(input)
 	local result = base64.encode(input)
-	
+
 	result = result:gsub('+','-'):gsub('/','_'):gsub('=','')
 
 	return result
@@ -79,7 +86,7 @@ function M.encode(data, key, alg)
 	if type(data) ~= 'table' then return nil, "Argument #1 must be table" end
 	if type(key) ~= 'string' then return nil, "Argument #2 must be string" end
 
-	alg = alg or "HS256" 
+	alg = alg or "HS256"
 
 	if not alg_sign[alg] then
 		return nil, "Algorithm not supported"
@@ -118,10 +125,10 @@ function M.decode(data, key, verify)
 
 	local ok, header, body, sig = pcall(function ()
 
-		return	cjson.decode(b64_decode(headerb64)), 
+		return	cjson.decode(b64_decode(headerb64)),
 			cjson.decode(b64_decode(bodyb64)),
 			b64_decode(sigb64)
-	end)	
+	end)
 
 	if not ok then
 		return nil, "Invalid json"

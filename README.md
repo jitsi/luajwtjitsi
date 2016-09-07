@@ -84,5 +84,11 @@ $ curl your.server/auth?jwt=TOKEN
 * HS384	- HMAC using SHA-384 hash algorithm
 * HS512 - HMAC using SHA-512 hash algorithm
 
+**RSA**
+
+* RS256 - RSA using SHA-256 hash algorithm
+* RS384 - RSA using SHA-384 hash algorithm
+* RS512 - RSA using SHA-512 hash algorithm
+
 ## License
 MIT
