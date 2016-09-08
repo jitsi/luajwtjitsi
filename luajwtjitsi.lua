@@ -2,39 +2,40 @@ local cjson  = require 'cjson'
 local base64 = require 'base64'
 local crypto = require 'crypto'
 
-local sign = function(data, key, algo) {
+local function signRS (data, key, algo)
 	local privkey = crypto.pkey.from_pem(key, true)
 	if privkey == nil then
 		return nil, 'Not a private PEM key'
 	else
 		return crypto.sign(algo, data, privkey)
 	end
-}
+end
 
-local verify = function(data, signature, key, algo) {
+local function verifyRS (data, signature, key, algo)
 	local pubkey = crypto.pkey.from_pem(key)
 	if pubkey == nil then
 		return nil, 'Not a public PEM key'
 	else
 		return crypto.verify(algo, data, signature, pubkey)
-}
+	end
+end
 
 local alg_sign = {
 	['HS256'] = function(data, key) return crypto.hmac.digest('sha256', data, key, true) end,
 	['HS384'] = function(data, key) return crypto.hmac.digest('sha384', data, key, true) end,
 	['HS512'] = function(data, key) return crypto.hmac.digest('sha512', data, key, true) end,
-	['RS256'] = function(data, key) return sign(data, key, 'sha256') end,
-	['RS384'] = function(data, key) return sign(data, key, 'sha384') end,
-	['RS512'] = function(data, key) return sign(data, key, 'sha512') end
+	['RS256'] = function(data, key) return signRS(data, key, 'sha256') end,
+	['RS384'] = function(data, key) return signRS(data, key, 'sha384') end,
+	['RS512'] = function(data, key) return signRS(data, key, 'sha512') end
 }
 
 local alg_verify = {
 	['HS256'] = function(data, signature, key) return signature == alg_sign['HS256'](data, key) end,
 	['HS384'] = function(data, signature, key) return signature == alg_sign['HS384'](data, key) end,
 	['HS512'] = function(data, signature, key) return signature == alg_sign['HS512'](data, key) end,
-	['RS256'] = function(data, signature, key) return verify(data, signature, key, 'sha256') end,
-	['RS384'] = function(data, signature, key) return verify(data, signature, key, 'sha384') end,
-	['RS512'] = function(data, signature, key) return verify(data, signature, key, 'sha512') end
+	['RS256'] = function(data, signature, key) return verifyRS(data, signature, key, 'sha256') end,
+	['RS384'] = function(data, signature, key) return verifyRS(data, signature, key, 'sha384') end,
+	['RS512'] = function(data, signature, key) return verifyRS(data, signature, key, 'sha512') end
 }
 
 local function b64_encode(input)
