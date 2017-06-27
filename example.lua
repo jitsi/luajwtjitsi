@@ -15,7 +15,7 @@ local function t2s(o)
 end
 
 -- 
-local jwt = require "luajwt"
+local jwt = require "luajwtjitsi"
 
 local key = "example_key"
 
@@ -25,8 +25,12 @@ local claim = {
 	exp = os.time() + 3600,
 }
 
+local header = {
+        test = "test123"
+}
+
 local alg = "HS256" -- default alg
-local token, err = jwt.encode(claim, key, alg)
+local token, err = jwt.encode(claim, key, alg, header)
 
 print("Token:", token)
 

@@ -83,7 +83,7 @@ end
 
 local M = {}
 
-function M.encode(data, key, alg)
+function M.encode(data, key, alg, header)
 	if type(data) ~= 'table' then return nil, "Argument #1 must be table" end
 	if type(key) ~= 'string' then return nil, "Argument #2 must be string" end
 
@@ -93,7 +93,10 @@ function M.encode(data, key, alg)
 		return nil, "Algorithm not supported"
 	end
 
-	local header = { typ='JWT', alg=alg }
+	header = header or {}
+
+	header['typ'] = 'JWT'
+	header['alg'] = alg
 
 	local segments = {
 		b64_encode(cjson.encode(header)),
