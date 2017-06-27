@@ -2,14 +2,14 @@ package = "luajwtjitsi"
 version = "1.3-7"
 
 source = {
-	url = "git://github.com/paweldomas/luajwt/",
+	url = "git://github.com/jitsi/luajwt/",
 	tag = "v1.7"
 }
 
 description = {
 	summary = "JSON Web Tokens for Lua",
 	detailed = "Very fast and compatible with pyjwt, php-jwt, ruby-jwt, node-jwt-simple and others",
-	homepage = "https://github.com/paweldomas/luajwt/",
+	homepage = "https://github.com/jitsi/luajwt/",
 	license = "MIT <http://opensource.org/licenses/MIT>"
 }
 
