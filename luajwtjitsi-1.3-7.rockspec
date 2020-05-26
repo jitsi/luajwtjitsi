@@ -15,7 +15,7 @@ description = {
 
 dependencies = {
 	"lua >= 5.1",
-	"luacrypto >= 0.3.2-1",
+	"luaossl >= 20190731-0",
 	"lua-cjson >= 2.1.0",
 	"lbase64 >= 20120807-3"
 }
@@ -24,5 +24,8 @@ build = {
 	type = "builtin",
 	modules = {
 		luajwtjitsi = "luajwtjitsi.lua"
-	}
+	},
+        copy_directories = {
+            "test"
+        }
 }
