@@ -118,6 +118,71 @@ function M.encode(data, key, alg, header)
 	return table.concat(segments, ".")
 end
 
+-- Verify that the token is valid, and if it is return the decoded JSON payload data.
+function M.verify(data, algo, key)
+	if type(data) ~= 'string' then return nil, "data argument must be string" end
+	if type(algo) ~= 'string' then return nil, "algorithm argument must be string" end
+	if type(key) ~= 'string' then return nil, "key argument must be string" end
+
+	if not alg_verify[algo] then
+		return nil, "Algorithm not supported"
+	end
+
+	local token = tokenize(data, '.', 3)
+	if #token ~= 3 then
+		return nil, "Invalid token"
+	end
+
+	local headerb64, bodyb64, sigb64 = token[1], token[2], token[3]
+
+	local ok, header, body, sig = pcall(function ()
+		return	cjson.decode(b64_decode(headerb64)),
+			cjson.decode(b64_decode(bodyb64)),
+			b64_decode(sigb64)
+	end)
+
+	if not ok then
+		return nil, "Invalid json"
+	end
+
+	if not header.typ or header.typ ~= "JWT" then
+		return nil, "Invalid typ"
+	end
+
+	if not header.alg or header.alg ~= algo then
+		return nil, "Invalid or incorrect alg"
+	end
+
+	if body.exp and type(body.exp) ~= "number" then
+		return nil, "exp must be number"
+	end
+
+	if body.nbf and type(body.nbf) ~= "number" then
+		return nil, "nbf must be number"
+	end
+
+	local verify_result, err
+		= alg_verify[algo](headerb64 .. "." .. bodyb64, sig, key);
+	if verify_result == nil then
+		return nil, err
+	elseif verify_result == false then
+		return nil, "Invalid signature"
+	end
+
+	if body.exp and os.time() >= body.exp then
+		return nil, "Not acceptable by exp"
+	end
+
+	if body.nbf and os.time() < body.nbf then
+		return nil, "Not acceptable by nbf"
+	end
+
+	return body
+end
+
+-- Warning - this is not secure if using a public key, since client could use the public key to sign
+-- a fake token with an HMAC algo and set that as the 'alg' to use in the header. Use M.verify above
+-- instead if using public key verification, so that you can choose the alg, not the client.
 function M.decode(data, key, verify)
 	if key and verify == nil then verify = true end
 	if type(data) ~= 'string' then return nil, "Argument #1 must be string" end

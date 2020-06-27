@@ -60,10 +60,13 @@ for _, test in ipairs(TESTS) do
 
 	-- Make sure it verifies and decodes.
 	local decoded = assert(jwt.decode(token, pubkey, true))
-	assert(type(decoded) == "table")
-	assert(decoded.iss == claim.iss)
-	assert(decoded.nbf == claim.nbf)
-	assert(decoded.exp == claim.exp)
+	local decoded2 = assert(jwt.verify(token, test.algo, pubkey))
+	for _, d in ipairs({ decoded, decoded2 }) do
+		assert(type(d) == "table")
+		assert(d.iss == claim.iss)
+		assert(d.nbf == claim.nbf)
+		assert(d.exp == claim.exp)
+	end
 
 	-- Should get an error if signature is corrupted, unless verify is turned off.
 	local bad_token = token:sub(1, #token - 10) .. 'aaaaaaaaaa'
@@ -71,6 +74,9 @@ for _, test in ipairs(TESTS) do
 	assert(type(decoded) == "table")
 	local decoded, err = jwt.decode(bad_token, pubkey, true)
 	assert(decoded == nil, "expected failure when using bad signature")
+	assert(err == "Invalid signature")
+	local failed, err = jwt.verify(bad_token, test.algo, pubkey)
+	assert(failed == nil)
 	assert(err == "Invalid signature")
 
 	-- Output the tokens for checking with external tool, like pyjwt.
