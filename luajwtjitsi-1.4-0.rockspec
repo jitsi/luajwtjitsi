@@ -1,9 +1,8 @@
 package = "luajwtjitsi"
-version = "1.3-7"
+version = "1.4-0"
 
 source = {
-	url = "git://github.com/jitsi/luajwt/",
-	tag = "v1.7"
+	url = "git://github.com/jitsi/luajwt/"
 }
 
 description = {
@@ -25,7 +24,7 @@ build = {
 	modules = {
 		luajwtjitsi = "luajwtjitsi.lua"
 	},
-        copy_directories = {
-            "test"
-        }
+	copy_directories = {
+		"test"
+	}
 }
