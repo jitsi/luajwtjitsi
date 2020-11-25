@@ -1,18 +1,14 @@
-luajwt
-===========
+# luajwtjitsi
 
 JSON Web Tokens for Lua
 
-```bash
-$ sudo luarocks install --server=http://rocks.moonscript.org luajwt
-```
 
 ## Usage
 
 Basic usage:
 
 ```lua
-local jwt = require "luajwt"
+local jwt = require "luajwtjitsi"
 
 local key = "example_key"
 
@@ -94,4 +90,5 @@ $ curl your.server/auth?jwt=TOKEN
 * RS512 - RSA using SHA-512 hash algorithm
 
 ## License
+
 MIT
