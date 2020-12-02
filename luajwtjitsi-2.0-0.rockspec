@@ -1,8 +1,9 @@
 package = "luajwtjitsi"
-version = "1.4-0"
+version = "2.0-0"
 
 source = {
-	url = "git://github.com/jitsi/luajwtjitsi/"
+	url = "git://github.com/jitsi/luajwtjitsi/",
+	tag = "v2.0",
 }
 
 description = {
