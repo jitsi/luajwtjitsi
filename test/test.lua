@@ -27,6 +27,7 @@ end
 -- Test data.
 local claim = {
 	iss = "12345678",
+	aud = "foobar",
 	nbf = os.time(),
 	exp = os.time() + 3600,
 }
@@ -59,25 +60,56 @@ for _, test in ipairs(TESTS) do
 	assert(type(token) == "string")
 
 	-- Make sure it verifies and decodes.
-	local decoded = assert(jwt.decode(token, pubkey, true))
-	local decoded2 = assert(jwt.verify(token, test.algo, pubkey))
-	for _, d in ipairs({ decoded, decoded2 }) do
-		assert(type(d) == "table")
-		assert(d.iss == claim.iss)
-		assert(d.nbf == claim.nbf)
-		assert(d.exp == claim.exp)
-	end
-
-	-- Should get an error if signature is corrupted, unless verify is turned off.
-	local bad_token = token:sub(1, #token - 10) .. 'aaaaaaaaaa'
-	local decoded = assert(jwt.decode(bad_token, pubkey, false))
+	local decoded = assert(jwt.verify(token, test.algo, pubkey))
 	assert(type(decoded) == "table")
-	local decoded, err = jwt.decode(bad_token, pubkey, true)
-	assert(decoded == nil, "expected failure when using bad signature")
-	assert(err == "Invalid signature")
+	assert(decoded.iss == claim.iss)
+	assert(decoded.aud == claim.aud)
+	assert(decoded.nbf == claim.nbf)
+	assert(decoded.exp == claim.exp)
+
+	-- Should verify with correct accepted issuers.
+	assert(jwt.verify(token, test.algo, pubkey, {"12345678"}))
+	assert(jwt.verify(token, test.algo, pubkey, {"other", "12345678"}))
+	assert(jwt.verify(token, test.algo, pubkey, {"*"}))
+
+	-- Should verify with correct accepted audience.
+	assert(jwt.verify(token, test.algo, pubkey, nil, {"foobar"}))
+	assert(jwt.verify(token, test.algo, pubkey, nil, {"other", "foobar"}))
+	assert(jwt.verify(token, test.algo, pubkey, nil, {"*"}))
+
+	-- Should get an error if signature is corrupted
+	local bad_token = token:sub(1, #token - 10) .. 'aaaaaaaaaa'
 	local failed, err = jwt.verify(bad_token, test.algo, pubkey)
 	assert(failed == nil)
 	assert(err == "Invalid signature")
+
+	-- Should get an error if issuer is not accepted.
+	local failed, err = jwt.verify(token, test.algo, pubkey, {"other"})
+	assert(failed == nil)
+	assert(err == "invalid 'iss' claim")
+
+	-- Should get an error if audience is not accepted.
+	local failed, err = jwt.verify(token, test.algo, pubkey, nil, {"other"})
+	assert(failed == nil)
+	assert(err == "invalid 'aud' claim")
+
+	-- Should get an error if token expired.
+	local expiredClaim = {table.unpack(claim)}
+	expiredClaim.exp = os.time() - 1
+	local expiredToken = assert(jwt.encode(expiredClaim, privkey, test.algo, header))
+	assert(type(token) == "string")
+	local failed, err = jwt.verify(expiredToken, test.algo, pubkey)
+	assert(failed == nil)
+	assert(err == "Not acceptable by exp")
+
+	-- Should get an error if token is not valid yet.
+	local invalidClaim = {table.unpack(claim)}
+	invalidClaim.nbf = os.time() + 1000
+	local expiredToken = assert(jwt.encode(invalidClaim, privkey, test.algo, header))
+	assert(type(token) == "string")
+	local failed, err = jwt.verify(expiredToken, test.algo, pubkey)
+	assert(failed == nil)
+	assert(err == "Not acceptable by nbf")
 
 	-- Output the tokens for checking with external tool, like pyjwt.
 	print("Token for " .. test.algo .. ":\n" .. token .. "\n")

@@ -35,6 +35,6 @@ local token, err = jwt.encode(claim, key, alg, header)
 print("Token:", token)
 
 local validate = true -- validate exp and nbf (default: true)
-local decoded, err = jwt.decode(token, key, validate)
+local decoded, err = jwt.verify(token, alg, key)
 
 print("Claim:", t2s(decoded) )
