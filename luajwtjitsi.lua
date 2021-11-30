@@ -1,9 +1,14 @@
-local cjson  = require 'cjson'
-local base64 = require 'base64'
+local cjson_safe  = require 'cjson.safe'
+local basexx = require 'basexx'
 local digest = require 'openssl.digest'
 local hmac   = require 'openssl.hmac'
 local pkey   = require 'openssl.pkey'
 
+-- Generates an RSA signature of the data.
+-- @param data The data to be signed.
+-- @param key The private signing key in PEM format.
+-- @param algo The digest algorithm to user when generating the signature: sha256, sha384, or sha512.
+-- @return The signature or nil and an error message.
 local function signRS (data, key, algo)
 	local privkey = pkey.new(key)
 	if privkey == nil then
@@ -14,14 +19,20 @@ local function signRS (data, key, algo)
 	end
 end
 
+-- Verifies an RSA signature on the data.
+-- @param data The signed data.
+-- @param signature The signature to be verified.
+-- @param key The public key of the signer.
+-- @param algo The digest algorithm to user when generating the signature: sha256, sha384, or sha512.
+-- @return True if the signature is valid, false otherwise. Also returns false if the key is invalid.
 local function verifyRS (data, signature, key, algo)
 	local pubkey = pkey.new(key)
 	if pubkey == nil then
-		return nil, 'Not a public PEM key'
-	else
-		local datadigest = digest.new(algo):update(data)
-		return pubkey:verify(signature, datadigest)
+		return false
 	end
+
+	local datadigest = digest.new(algo):update(data)
+	return pubkey:verify(signature, datadigest)
 end
 
 local alg_sign = {
@@ -42,51 +53,83 @@ local alg_verify = {
 	['RS512'] = function(data, signature, key) return verifyRS(data, signature, key, 'sha512') end
 }
 
-local function b64_encode(input)
-	local result = base64.encode(input)
-
-	result = result:gsub('+','-'):gsub('/','_'):gsub('=','')
-
-	return result
+-- Splits a token into segments, separated by '.'.
+-- @param token The full token to be split.
+-- @return A table of segments.
+local function split_token(token)
+	local segments={}
+  for str in string.gmatch(token, "([^\\.]+)") do
+    table.insert(segments, str)
+  end
+  return segments
 end
 
-local function b64_decode(input)
---	input = input:gsub('\n', ''):gsub(' ', '')
-
-	local reminder = #input % 4
-
-	if reminder > 0 then
-		local padlen = 4 - reminder
-		input = input .. string.rep('=', padlen)
+-- Parses a JWT token into it's header, body, and signature.
+-- @param token The JWT token to be parsed.
+-- @return A JSON header and body represented as a table, and a signature.
+local function parse_token(token)
+	local segments=split_token(token)
+  if #segments ~= 3 then
+		return nil, nil, nil, "Invalid token"
 	end
 
-	input = input:gsub('-','+'):gsub('_','/')
+	local header, err = cjson_safe.decode(basexx.from_url64(segments[1]))
+	if err then
+		return nil, nil, nil, "Invalid header"
+	end
 
-	return base64.decode(input)
+	local body, err = cjson_safe.decode(basexx.from_url64(segments[2]))
+	if err then
+		return nil, nil, nil, "Invalid body"
+	end
+
+	local sig, err = basexx.from_url64(segments[3])
+	if err then
+		return nil, nil, nil, "Invalid signature"
+	end
+
+	return header, body, sig
 end
 
-local function tokenize(str, div, len)
-	local result, pos = {}, 0
-
-	for st, sp in function() return str:find(div, pos, true) end do
-
-		result[#result + 1] = str:sub(pos, st-1)
-		pos = sp + 1
-
-		len = len - 1
-
-		if len <= 1 then
-			break
-		end
+-- Removes the signature from a JWT token.
+-- @param token A JWT token.
+-- @return The token without its signature.
+local function strip_signature(token)
+	local segments=split_token(token)
+  if #segments ~= 3 then
+		return nil, nil, nil, "Invalid token"
 	end
 
-	result[#result + 1] = str:sub(pos)
+	table.remove(segments)
+	return table.concat(segments, ".")
+end
 
-	return result
+-- Verifies that a claim is in a list of allowed claims. Allowed claims can be exact values, or the
+-- catch all wildcard '*'.
+-- @param claim The claim to be verified.
+-- @param acceptedClaims A table of accepted claims.
+-- @return True if the claim was allowed, false otherwise.
+local function verify_claim(claim, acceptedClaims)
+  for i, accepted in ipairs(acceptedClaims) do
+    if accepted == '*' then
+      return true;
+    end
+    if claim == accepted then
+      return true;
+    end
+  end
+
+  return false;
 end
 
 local M = {}
 
+-- Encodes the data into a signed JWT token.
+-- @param data The data the put in the body of the JWT token.
+-- @param key The key to use for signing the JWT token.
+-- @param alg The signature algorithm to use: HS256, HS384, HS512, RS256, RS384, or RS512.
+-- @param header Additional values to put in the JWT header.
+-- @param The resulting JWT token, or nil and an error message.
 function M.encode(data, key, alg, header)
 	if type(data) ~= 'table' then return nil, "Argument #1 must be table" end
 	if type(key) ~= 'string' then return nil, "Argument #2 must be string" end
@@ -102,9 +145,19 @@ function M.encode(data, key, alg, header)
 	header['typ'] = 'JWT'
 	header['alg'] = alg
 
+	local headerEncoded, err = cjson_safe.encode(header)
+	if headerEncoded == nil then
+		return nil, err
+	end
+
+	local dataEncoded, err = cjson_safe.encode(data)
+	if dataEncoded == nil then
+		return nil, err
+	end
+
 	local segments = {
-		b64_encode(cjson.encode(header)),
-		b64_encode(cjson.encode(data))
+		basexx.to_url64(headerEncoded),
+		basexx.to_url64(dataEncoded)
 	}
 
 	local signing_input = table.concat(segments, ".")
@@ -113,46 +166,56 @@ function M.encode(data, key, alg, header)
 		return nil, error
 	end
 
-	segments[#segments+1] = b64_encode(signature)
+	segments[#segments+1] = basexx.to_url64(signature)
 
 	return table.concat(segments, ".")
 end
 
 -- Verify that the token is valid, and if it is return the decoded JSON payload data.
-function M.verify(data, algo, key)
-	if type(data) ~= 'string' then return nil, "data argument must be string" end
-	if type(algo) ~= 'string' then return nil, "algorithm argument must be string" end
+-- @param token The token to verify.
+-- @param expectedAlgo The signature algorithm the caller expects the token to be signed with:
+--     HS256, HS384, HS512, RS256, RS384, or RS512.
+-- @param key The verification key used for the signature.
+-- @param acceptedIssuers Optional table of accepted issuers. If not nil, the 'iss' claim will be
+--     checked against this list.
+-- @param acceptedAudiences Optional table of accepted audiences. If not nil, the 'aud' claim will
+--     be checked against this list.
+-- @return A table representing the JSON body of the token, or nil and an error message.
+function M.verify(token, expectedAlgo, key, acceptedIssuers, acceptedAudiences)
+	if type(token) ~= 'string' then return nil, "token argument must be string" end
+	if type(expectedAlgo) ~= 'string' then return nil, "algorithm argument must be string" end
 	if type(key) ~= 'string' then return nil, "key argument must be string" end
+	if acceptedIssuers ~= nil and type(acceptedIssuers) ~= 'table' then
+		return nil, "acceptedIssuers argument must be table"
+	end
+	if acceptedAudiences ~= nil and type(acceptedAudiences) ~= 'table' then
+		return nil, "acceptedAudiences argument must be table"
+	end
 
-	if not alg_verify[algo] then
+	if not alg_verify[expectedAlgo] then
 		return nil, "Algorithm not supported"
 	end
 
-	local token = tokenize(data, '.', 3)
-	if #token ~= 3 then
-		return nil, "Invalid token"
+	local header, body, sig, err = parse_token(token)
+	if err ~= nil then
+		return nil, err
 	end
 
-	local headerb64, bodyb64, sigb64 = token[1], token[2], token[3]
-
-	local ok, header, body, sig = pcall(function ()
-		return	cjson.decode(b64_decode(headerb64)),
-			cjson.decode(b64_decode(bodyb64)),
-			b64_decode(sigb64)
-	end)
-
-	if not ok then
-		return nil, "Invalid json"
-	end
-
+	-- Validate header
 	if not header.typ or header.typ ~= "JWT" then
 		return nil, "Invalid typ"
 	end
 
-	if not header.alg or header.alg ~= algo then
+	if not header.alg or header.alg ~= expectedAlgo then
 		return nil, "Invalid or incorrect alg"
 	end
 
+	-- Validate signature
+	if not alg_verify[expectedAlgo](strip_signature(token), sig, key) then
+		return nil, 'Invalid signature'
+	end
+
+	-- Validate body
 	if body.exp and type(body.exp) ~= "number" then
 		return nil, "exp must be number"
 	end
@@ -161,13 +224,6 @@ function M.verify(data, algo, key)
 		return nil, "nbf must be number"
 	end
 
-	local verify_result, err
-		= alg_verify[algo](headerb64 .. "." .. bodyb64, sig, key);
-	if verify_result == nil then
-		return nil, err
-	elseif verify_result == false then
-		return nil, "Invalid signature"
-	end
 
 	if body.exp and os.time() >= body.exp then
 		return nil, "Not acceptable by exp"
@@ -177,73 +233,24 @@ function M.verify(data, algo, key)
 		return nil, "Not acceptable by nbf"
 	end
 
-	return body
-end
-
--- Warning - this is not secure if using a public key, since client could use the public key to sign
--- a fake token with an HMAC algo and set that as the 'alg' to use in the header. Use M.verify above
--- instead if using public key verification, so that you can choose the alg, not the client.
-function M.decode(data, key, verify)
-	if key and verify == nil then verify = true end
-	if type(data) ~= 'string' then return nil, "Argument #1 must be string" end
-	if verify and type(key) ~= 'string' then return nil, "Argument #2 must be string" end
-
-	local token = tokenize(data, '.', 3)
-
-	if #token ~= 3 then
-		return nil, "Invalid token"
+	if acceptedIssuers ~= nil then
+		local issClaim = body.iss;
+		if issClaim == nil then
+        return nil, "'iss' claim is missing";
+    end
+    if not verify_claim(issClaim, acceptedIssuers) then
+    	return nil, "invalid 'iss' claim";
+    end
 	end
 
-	local headerb64, bodyb64, sigb64 = token[1], token[2], token[3]
-
-	local ok, header, body, sig = pcall(function ()
-
-		return	cjson.decode(b64_decode(headerb64)),
-			cjson.decode(b64_decode(bodyb64)),
-			b64_decode(sigb64)
-	end)
-
-	if not ok then
-		return nil, "Invalid json"
-	end
-
-	if verify then
-
-		if not header.typ or header.typ ~= "JWT" then
-			return nil, "Invalid typ"
-		end
-
-		if not header.alg or type(header.alg) ~= "string" then
-			return nil, "Invalid alg"
-		end
-
-		if body.exp and type(body.exp) ~= "number" then
-			return nil, "exp must be number"
-		end
-
-		if body.nbf and type(body.nbf) ~= "number" then
-			return nil, "nbf must be number"
-		end
-
-		if not alg_verify[header.alg] then
-			return nil, "Algorithm not supported"
-		end
-
-		local verify_result, error
-			= alg_verify[header.alg](headerb64 .. "." .. bodyb64, sig, key);
-		if verify_result == nil then
-			return nil, error
-		elseif verify_result == false then
-			return nil, "Invalid signature"
-		end
-
-		if body.exp and os.time() >= body.exp then
-			return nil, "Not acceptable by exp"
-		end
-
-		if body.nbf and os.time() < body.nbf then
-			return nil, "Not acceptable by nbf"
-		end
+	if acceptedAudiences ~= nil then
+		local audClaim = body.aud;
+		if audClaim == nil then
+        return nil, "'aud' claim is missing";
+    end
+    if not verify_claim(audClaim, acceptedAudiences) then
+    	return nil, "invalid 'aud' claim";
+    end
 	end
 
 	return body
