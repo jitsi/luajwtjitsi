@@ -28,16 +28,6 @@ local token, err = jwt.encode(payload, key, alg)
 local decoded, err = jwt.verify(token, alg, key)
 
 -- decoded: { ["iss"] = 12345678, ["nbf"] = 1405108000, ["exp"] = 1405181916 }
-
--- same, but use alg from token (not safe if using public key to verify):
-local validate = true -- validate signature, exp and nbf (default: true)
-local decoded, err = jwt.decode(token, key, validate)
-
--- only decode
-local unsafe, err = jwt.decode(token)
-
--- unsafe:  { ["iss"] = 12345678, ["nbf"] = 1405108000, ["exp"] = 1405181916 }
-
 ```
 
 An openresty/nginx lua jwt auth example:
