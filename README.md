@@ -2,6 +2,7 @@
 
 JSON Web Tokens for Lua
 
+**This plugin now lives here: ** https://github.com/jitsi/jitsi-meet/blob/master/resources/prosody-plugins/luajwtjitsi.lib.lua
 
 ## Usage
 
